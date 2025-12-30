@@ -1,0 +1,36 @@
+name: Update AdBlock List
+
+on:
+  schedule:
+    # 每天 UTC 22:00 运行 (对应北京时间早上 06:00)
+    - cron: '0 22 * * *'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run merge script
+      run: python main.py
+      
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add merged_ads.list
+        # 如果文件没有变化，git commit 会报错，所以加了 || exit 0
+        git commit -m "Auto-update adblock list" || exit 0
+        git push
