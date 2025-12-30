@@ -1,5 +1,5 @@
 # QX AdBlock Merged 4.0 (Preserve Policy)
-# 更新时间: 2025-12-30 12:42:41
+# 更新时间: 2025-12-30 14:11:55
 # 规则总数: 3271
 # 说明: 已自动去重，并保留了原始源的 reject/reject-200/reject-dict 策略
 HOST,lookup.api.bsb.baidu.com,reject
