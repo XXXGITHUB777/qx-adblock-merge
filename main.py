@@ -5,24 +5,14 @@ from datetime import datetime
 
 # ================= 配置区域 =================
 
-# ！！！关键修改：全部换成 CDN 链接，解决 0 条的问题！！！
+# 使用 GhProxy 代理 GitHub Raw 链接，这是目前最稳的方案
 REMOTE_URLS = [
-    # 1. 秋风 (CDN 加速版)
-    "https://cdn.jsdelivr.net/gh/TG-Twilight/AWAvenue-Ads-Rule@main/Filters/AWAvenue-Ads-Rule-QuantumultX.list",
+    # 1. 秋风
+    "https://ghproxy.net/https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-QuantumultX.list",
     
-    # 2. 毒奶 Limbopro (CDN 加速版)
-    "https://cdn.jsdelivr.net/gh/limbopro/Adblock4limbo@main/Adblock4limbo.list"
+    # 2. 毒奶 Limbopro
+    "https://ghproxy.net/https://raw.githubusercontent.com/limbopro/Adblock4limbo/main/Adblock4limbo.list"
 ]
-
-# 备用：如果上面的都挂了，保留这两个稳健的作为兜底（可选，不想用可以注释掉）
-# REMOTE_URLS.append("https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/QuantumultX/filter/filter.list")
-# REMOTE_URLS.append("https://cdn.jsdelivr.net/gh/zirawell/R-Store@main/Rule/QuanX/Adblock/All/filter/allAdBlock.list")
-
-# 有效的拒绝策略关键词
-VALID_POLICIES = {
-    "reject", "reject-200", "reject-tinygif", "reject-img", 
-    "reject-dict", "reject-array", "reject-video"
-}
 
 # ================= 逻辑区域 =================
 
@@ -30,93 +20,82 @@ def fetch_and_merge_rules():
     unique_rules = {} 
     source_stats = {} 
     
+    # 伪装成浏览器，防止被拦截
     headers = {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     
-    print(f"--- 开始执行 6.0 CDN 加速合并 ---")
+    print(f"--- 开始执行 7.0 GhProxy 代理合并 ---")
 
     for url in REMOTE_URLS:
-        # 提取文件名
-        source_name = url.split('/')[-1]
-        if "AWAvenue" in url: source_name = "秋风(AWAvenue)"
-        if "limbopro" in url: source_name = "毒奶(Limbopro)"
+        if "AWAvenue" in url: name = "秋风(AWAvenue)"
+        elif "limbopro" in url: name = "毒奶(Limbopro)"
+        else: name = "Unknown"
             
-        print(f"正在下载: {source_name} ...", end="")
+        print(f"正在下载: {name} ...", end="")
         
         try:
-            resp = requests.get(url, headers=headers, timeout=30)
-            
-            # 强制设置编码，防止中文乱码
-            resp.encoding = 'utf-8'
+            resp = requests.get(url, headers=headers, timeout=60)
+            resp.encoding = 'utf-8' # 强制UTF-8
             
             if resp.status_code != 200:
-                print(f" [失败] HTTP Code: {resp.status_code}")
-                source_stats[source_name] = 0
+                print(f" [失败] HTTP 状态码: {resp.status_code}")
+                source_stats[name] = 0
                 continue
 
             lines = resp.text.splitlines()
-            current_source_count = 0
+            current_count = 0
             
-            # --- 调试：如果下载内容太短，打印出来看看是啥 ---
-            if len(lines) < 10:
-                print(f"\n[警告] {source_name} 内容异常短，可能不是规则文件，前3行内容:")
-                for i in range(min(3, len(lines))):
-                    print(f"  Line {i}: {lines[i]}")
-            # ---------------------------------------------
-            
+            # --- 核心逻辑 ---
             for line in lines:
                 line = line.strip()
-                
-                # 1. 基础清理
+                # 过滤无效行
                 if not line or line.startswith(('#', ';', '//', '[', '<', '!')):
                     continue
-                # 2. 必须包含逗号
                 if ',' not in line:
                     continue
                     
                 parts = [p.strip() for p in line.split(',')]
                 
-                # 3. 智能补全 (HOST,baidu.com -> HOST,baidu.com,reject)
-                if len(parts) == 2:
-                    parts.append("reject")
+                # 补全缺省策略
+                if len(parts) == 2: parts.append("reject")
                 
-                if len(parts) < 3:
-                    continue
+                if len(parts) < 3: continue
 
                 rule_type = parts[0].upper()
                 target = parts[1]
                 policy = parts[2].lower()
 
-                # 4. 类型过滤
+                # 类型过滤
                 if rule_type not in ["HOST", "HOST-SUFFIX", "HOST-KEYWORD", "IP-CIDR", "IP-CIDR6", "USER-AGENT"]:
                     continue
 
-                # 5. 策略清洗
-                is_valid_policy = False
-                for p in VALID_POLICIES:
-                    if p in policy:
-                        is_valid_policy = True
-                        break
-                
-                if not is_valid_policy:
-                    policy = "reject"
-
-                # 6. 生成Key (小写去重)
+                # 存入
                 unique_key = f"{rule_type},{target}".lower()
-
-                # 7. 存入
                 if unique_key not in unique_rules:
+                    # 确保策略包含 reject，否则强制修正
+                    if "reject" not in policy: policy = "reject"
+                    
                     final_rule = f"{rule_type},{target},{policy}"
                     unique_rules[unique_key] = final_rule
-                    current_source_count += 1
+                    current_count += 1
             
-            source_stats[source_name] = current_source_count
-            print(f" [成功提取 {current_source_count} 条]")
+            source_stats[name] = current_count
+            print(f" [成功提取 {current_count} 条]")
+            
+            # === 死因报告：如果提取为0，打印原始内容供调试 ===
+            if current_count == 0:
+                print(f"\n[严重警告] {name} 下载成功但提取数为 0！")
+                print("下载内容的前 10 行如下 (请检查是否为 HTML 报错页面):")
+                print("-" * 30)
+                for i in range(min(10, len(lines))):
+                    print(lines[i])
+                print("-" * 30)
+            # ============================================
             
         except Exception as e:
             print(f" [出错] {e}")
-            source_stats[source_name] = 0
+            source_stats[name] = 0
 
     return list(unique_rules.values()), source_stats
 
@@ -124,17 +103,14 @@ def sort_priority(line):
     line = line.upper()
     if line.startswith("HOST,"): return 1
     if line.startswith("HOST-SUFFIX,"): return 2
-    if line.startswith("HOST-KEYWORD,"): return 3
-    if line.startswith("IP-CIDR"): return 4
     return 10
 
 def main():
     rules, stats = fetch_and_merge_rules()
     
-    # 安全检查：如果规则太少，抛出异常，防止覆盖
-    if len(rules) < 100:
-        print("错误：生成的规则数量过少，放弃写入，保留旧文件。")
-        # 这里 exit(1) 会让 Action 报错变红，提醒你注意
+    # 只要规则总数少于 500 (即使其中一个源失败)，就报错，保护旧文件
+    if len(rules) < 500:
+        print(f"\n错误：最终生成的规则仅有 {len(rules)} 条，判定为异常，停止写入。")
         exit(1)
 
     sorted_rules = sorted(rules, key=sort_priority)
@@ -143,21 +119,20 @@ def main():
     now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
     
     header = [
-        f"# QX AdBlock Merged 6.0 (CDN)",
+        f"# QX AdBlock Merged 7.0",
         f"# 更新时间: {now}",
         f"# 规则总数: {len(sorted_rules)}",
         f"# --- 来源详情 ---"
     ]
-    
-    for name, count in stats.items():
-        header.append(f"# {name}: {count}")
+    for n, c in stats.items():
+        header.append(f"# {n}: {c}")
     header.append("")
     
     with open("merged_ads.list", "w", encoding="utf-8") as f:
         f.write("\n".join(header))
         f.write("\n".join(sorted_rules))
         
-    print(f"\n处理完成！Merged List 已生成。")
+    print(f"\n处理完成！merged_ads.list 已生成。")
 
 if __name__ == "__main__":
     main()
