@@ -1,5 +1,5 @@
 # QX AdBlock Merged 4.0 (Preserve Policy)
-# 更新时间: 2025-12-30 11:49:30
+# 更新时间: 2025-12-30 11:54:56
 # 规则总数: 3271
 # 说明: 已自动去重，并保留了原始源的 reject/reject-200/reject-dict 策略
 HOST,lookup.api.bsb.baidu.com,reject
@@ -3140,7 +3140,7 @@ HOST-KEYWORD,ossp.voicecloud.cn,reject
 HOST-KEYWORD,bj.imp.voiceads.cn,reject
 HOST-KEYWORD,m.panda.voiceads.cn,reject
 HOST-KEYWORD,iflyad.bj.openstorage.cn,reject
-HOST-KEYWORD,XiaoQiang,reject
+HOST-KEYWORD,xiaoqiang,reject
 HOST-KEYWORD,mpos-pic.helipay.com,reject
 HOST-KEYWORD,lkme.cc,reject
 HOST-KEYWORD,api.freed.so,reject
@@ -3272,4 +3272,4 @@ IP-CIDR,59.82.14.1/32,reject
 IP-CIDR,59.82.14.161/32,reject
 IP-CIDR,59.82.34.147/32,reject
 IP-CIDR,59.82.34.255/32,reject
-USER-AGENT,AVOS*,reject
+USER-AGENT,avos*,reject
