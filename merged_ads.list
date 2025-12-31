@@ -1,11 +1,11 @@
 # QX AdBlock Merged 9.0 (Full Set)
-# 更新时间: 2025-12-31 06:19:52
-# 规则总数: 4314
+# 更新时间: 2026-01-01 06:20:36
+# 规则总数: 4315
 # --- 来源贡献 ---
 # 秋风: 902
 # 毒奶: 473
 # FMZ200: 2391
-# Zirawell: 548
+# Zirawell: 549
 HOST,1500020991.vodplayer.wxamedia.com,reject
 HOST,1500022744.vodplayer.wxamedia.com,reject
 HOST,1500026601.vodplayer.wxamedia.com,reject
@@ -1267,6 +1267,7 @@ HOST,credits.bz.mgtv.com,reject
 HOST,credits2.bz.mgtv.com,reject
 HOST,credits3.bz.mgtv.com,reject
 HOST,csc-apm.sgcc.com.cn,reject
+HOST,cube.weixinbridge.com,reject
 HOST,da.bridgeturbo.com,reject
 HOST,dig.zjurl.cn,reject
 HOST,dm.bytedance.com,reject
