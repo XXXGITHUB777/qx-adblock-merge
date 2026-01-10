@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # === 配置区域 ===
 OUTPUT_FILENAME = "block.list"
-MAX_WORKERS = 8  # 下载线程数
-TIMEOUT = 30     # 请求超时时间
+MAX_WORKERS = 8
+TIMEOUT = 30
 
 REMOTE_URLS = [
     "https://ghproxy.net/https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/main/Filters/AWAvenue-Ads-Rule-QuantumultX.list",
@@ -21,18 +21,28 @@ REMOTE_URLS = [
     "https://ghproxy.net/https://raw.githubusercontent.com/SukkaLab/ruleset.skk.moe/master/List/non_ip/reject-no-drop.conf"
 ]
 
-# QX 支持的规则类型映射
+# === 修正的核心：全类型映射 ===
+# 左边是源文件可能出现的写法，右边是 QX 的标准写法
 TYPE_MAP = {
-    "DOMAIN": "HOST",
-    "DOMAIN-SUFFIX": "HOST-SUFFIX",
-    "DOMAIN-KEYWORD": "HOST-KEYWORD",
-    "IP-CIDR": "IP-CIDR",
-    "IP-CIDR6": "IP-CIDR6",
-    "USER-AGENT": "USER-AGENT"
+    # 1. 兼容 Surge / Clash / Loon 格式
+    "DOMAIN": "host",
+    "DOMAIN-SUFFIX": "host-suffix",
+    "DOMAIN-KEYWORD": "host-keyword",
+    "IP-CIDR": "ip-cidr",
+    "IP-CIDR6": "ip6-cidr",
+    "USER-AGENT": "user-agent",
+    
+    # 2. 保留 QX 原生格式 (上次漏了这些，导致原生规则被删)
+    "HOST": "host",
+    "HOST-SUFFIX": "host-suffix",
+    "HOST-KEYWORD": "host-keyword",
+    "HOST-WILDCARD": "host-wildcard",
+    "IP6-CIDR": "ip6-cidr",
+    "GEOIP": "geoip",
+    "IP-ASN": "ip-asn"
 }
 
 def get_source_name(url):
-    """根据URL简单的判断源名称，用于日志显示"""
     if "AWAvenue" in url: return "秋风"
     if "limbopro" in url: return "毒奶"
     if "fmz200" in url: return "FMZ200"
@@ -44,7 +54,6 @@ def get_source_name(url):
     return "Unknown"
 
 def fetch_single_url(url):
-    """下载并解析单个URL的内容"""
     name = get_source_name(url)
     rules_found = []
     
@@ -62,14 +71,11 @@ def fetch_single_url(url):
         lines = resp.text.splitlines()
         
         for line in lines:
-            # 1. 基础清理：去注释、去首尾空格
             line = re.split(r'(#|;|//)', line)[0].strip()
             if not line: continue
-            
-            # 2. 排除非规则行
             if line.startswith(('[', '<', '!', 'no-alert', 'payload:')): continue
 
-            # 3. 分割逻辑：支持逗号或空格分隔
+            # 兼容逗号或空格分隔
             if ',' in line:
                 parts = [p.strip() for p in line.split(',')]
             else:
@@ -77,32 +83,29 @@ def fetch_single_url(url):
 
             if len(parts) < 2: continue
 
-            # 4. 类型标准化
             raw_type = parts[0].upper()
             
-            # 处理 "payload: - DOMAIN-SUFFIX,xxx" 这种奇怪格式
+            # 处理 "payload: - DOMAIN-SUFFIX,xxx"
             if raw_type == "-" and len(parts) > 2:
                 raw_type = parts[1].upper()
                 target = parts[2]
             else:
                 target = parts[1]
 
-            # 映射到 QX 标准类型
             qx_type = TYPE_MAP.get(raw_type)
+            
+            # 如果类型不在白名单，跳过
             if not qx_type:
-                # 如果不是标准类型（如 PROCESS-NAME），直接忽略
                 continue
             
-            # 清理目标字符串的引号
             target = target.strip("'").strip('"')
 
-            # 5. 生成最终规则
-            # 策略统一为 reject，因为这是一个 block list
-            # IP类规则强制添加 no-resolve
-            if qx_type in ["IP-CIDR", "IP-CIDR6"]:
-                rule = f"{qx_type},{target},reject,no-resolve"
+            # 强制策略 reject
+            # IP 类规则强制加 no-resolve
+            if qx_type in ["ip-cidr", "ip6-cidr"]:
+                rule = f"{qx_type}, {target}, reject, no-resolve"
             else:
-                rule = f"{qx_type},{target},reject"
+                rule = f"{qx_type}, {target}, reject"
             
             rules_found.append(rule)
             
@@ -114,26 +117,20 @@ def fetch_single_url(url):
         return name, []
 
 def rule_sort_key(rule):
-    """
-    排序逻辑：
-    1. HOST-SUFFIX (最常用)
-    2. HOST-KEYWORD
-    3. HOST
-    4. USER-AGENT
-    5. IP-CIDR / IP-CIDR6
-    """
+    # 按照 QX 建议的匹配开销顺序排序
     parts = rule.split(',')
-    rtype = parts[0]
-    target = parts[1]
+    rtype = parts[0].strip()
     
     priority = 100
-    if rtype == "HOST-SUFFIX": priority = 1
-    elif rtype == "HOST-KEYWORD": priority = 2
-    elif rtype == "HOST": priority = 3
-    elif rtype == "USER-AGENT": priority = 4
-    elif rtype.startswith("IP"): priority = 5
+    if rtype == "host-suffix": priority = 1
+    elif rtype == "host-keyword": priority = 2
+    elif rtype == "host": priority = 3
+    elif rtype == "host-wildcard": priority = 4
+    elif rtype == "user-agent": priority = 5
+    elif rtype.startswith("ip"): priority = 6
+    elif rtype == "geoip": priority = 7
     
-    return (priority, target)
+    return priority
 
 def main():
     print(f"--- Starting Download ({MAX_WORKERS} threads) ---")
@@ -141,10 +138,8 @@ def main():
     all_rules_set = set()
     source_stats = {}
 
-    # 多线程下载
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(fetch_single_url, url): url for url in REMOTE_URLS}
-        
         for future in as_completed(futures):
             name, rules = future.result()
             source_stats[name] = len(rules)
@@ -158,23 +153,19 @@ def main():
     sorted_rules = sorted(list(all_rules_set), key=rule_sort_key)
     current_count = len(sorted_rules)
 
-    # 统计变化
+    # 计算增量
     old_count = 0
     diff_msg = "(Init)"
     if os.path.exists(OUTPUT_FILENAME):
         try:
             with open(OUTPUT_FILENAME, 'r', encoding='utf-8') as f:
-                # 简单统计行数
                 old_count = sum(1 for line in f if line.strip() and not line.startswith('#'))
-            
             diff = current_count - old_count
             if diff > 0: diff_msg = f"(+{diff})"
             elif diff < 0: diff_msg = f"({diff})"
             else: diff_msg = "(0)"
-        except:
-            pass
+        except: pass
 
-    # 生成文件头
     tz = pytz.timezone('Asia/Shanghai')
     now = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
     
@@ -182,20 +173,16 @@ def main():
         f"# QX AdBlock All-in-One",
         f"# Updated: {now}",
         f"# Total: {current_count} {diff_msg}",
-        f"# Note: All rules are forced to 'reject'",
-        f"# Note: IP rules include 'no-resolve'",
         f"#"
     ]
-    
-    # 按规则数量降序排列源统计
-    for n, c in sorted(source_stats.items(), key=lambda item: item[1], reverse=True):
+    for n, c in sorted(source_stats.items(), key=lambda x: x[1], reverse=True):
         header.append(f"# {n}: {c}")
     header.append("")
 
     with open(OUTPUT_FILENAME, "w", encoding="utf-8") as f:
         f.write("\n".join(header))
         f.write("\n".join(sorted_rules))
-        f.write("\n") # EOF newline
+        f.write("\n")
 
     print(f"\nCompleted. Saved to {OUTPUT_FILENAME}")
     print(f"Total Rules: {current_count} | Diff: {diff_msg}")
