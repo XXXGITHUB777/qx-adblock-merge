@@ -2,8 +2,9 @@ name: Update AdBlock List
 
 on:
   schedule:
-    # 每天 UTC 22:00 运行 (对应北京时间早上 06:00)
-    - cron: '0 22 * * *'
+    # 北京时间 04:37 (网速最快时段，且避开整点高峰)
+    # 对应 UTC 时间 20:37
+    - cron: '37 20 * * *'
   workflow_dispatch: # 允许手动触发
 
 jobs:
@@ -30,7 +31,6 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add merged_ads.list
-        # 如果文件没有变化，git commit 会报错，所以加了 || exit 0
+        git add block.list
         git commit -m "Auto-update adblock list" || exit 0
         git push
